@@ -894,7 +894,62 @@ with tab_raw:
     # 1) 금액 관련 컬럼 1,000단위 콤마 표시
     # 2) 번호 컬럼 1.0, 2.0 → 1, 2 표시
     # 3) 비고 컬럼 NaN/None/nan → 공백 표시
+    # 원본데이터 탭 표시용 데이터 정리 함수
+    # 1) 금액 관련 컬럼 1,000단위 콤마 표시
+    # 2) 번호 컬럼 1.0, 2.0 → 1, 2 표시
+    # 3) 전분기 예약인원, 최종순위 정수 표시
+    # 4) 모객성장률 % 표시
+    # 5) 비고 및 전체 NaN/None/nan 공백 처리
     def format_money_columns_for_display(dataframe):
+        display_df = dataframe.copy()
+
+        # 금액 관련 컬럼 콤마 처리
+        money_keywords = ["금액", "지원금", "매출"]
+        money_columns = [
+            col for col in display_df.columns
+            if any(keyword in str(col) for keyword in money_keywords)
+        ]
+
+        for col in money_columns:
+            display_df[col] = pd.to_numeric(display_df[col], errors="coerce")
+            display_df[col] = display_df[col].apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else ""
+            )
+
+        # 정수로 표시할 컬럼 처리
+        integer_columns = ["번호", "전분기 예약인원", "최종순위"]
+
+        for col in integer_columns:
+            if col in display_df.columns:
+                display_df[col] = pd.to_numeric(display_df[col], errors="coerce")
+                display_df[col] = display_df[col].apply(
+                    lambda x: f"{int(x)}" if pd.notna(x) else ""
+                )
+
+        # 모객성장률 % 표시 처리
+        if "모객성장률" in display_df.columns:
+            display_df["모객성장률"] = pd.to_numeric(display_df["모객성장률"], errors="coerce")
+            display_df["모객성장률"] = display_df["모객성장률"].apply(
+                lambda x: f"{x * 100:.1f}%" if pd.notna(x) else ""
+            )
+
+        # 비고 컬럼 NaN/None/nan 공백 처리
+        if "비고" in display_df.columns:
+            display_df["비고"] = display_df["비고"].replace(
+                [pd.NA, None, "None", "none", "nan", "NaN"],
+                "",
+            )
+            display_df["비고"] = display_df["비고"].fillna("")
+
+        # 전체 표시용 데이터에서 남아 있는 NaN/None/nan 문자열 공백 처리
+        display_df = display_df.replace(
+            [pd.NA, None, "None", "none", "nan", "NaN"],
+            "",
+        )
+        display_df = display_df.fillna("")
+
+        return display_df
+
         display_df = dataframe.copy()
 
         # 금액 관련 컬럼 콤마 처리
