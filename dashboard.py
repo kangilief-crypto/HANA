@@ -805,6 +805,90 @@ with tab_raw:
 
     raw_tab1, raw_tab2, raw_tab3 = st.tabs(["최종실적", "부서별 모객현황", "참여대리점 리스트"])
 
+    # 원본데이터 탭 전용 가운데 정렬 테이블 스타일
+    st.markdown(
+        """
+        <style>
+            .raw-center-table {
+                width: 100%;
+                border-collapse: collapse;
+                background-color: #FFFFFF;
+                font-size: 13px;
+                border: 1px solid #E5E7EB;
+            }
+
+            .raw-center-table thead th {
+                background-color: #F5F0FF;
+                color: #5E2BB8;
+                font-weight: 700;
+                text-align: center !important;
+                padding: 9px 8px;
+                border: 1px solid #E5E7EB;
+                white-space: nowrap;
+            }
+
+            .raw-center-table tbody td {
+                text-align: center !important;
+                padding: 8px 8px;
+                border: 1px solid #E5E7EB;
+                color: #1F1B2E;
+                vertical-align: middle;
+                white-space: nowrap;
+            }
+
+            .raw-center-table tbody tr:nth-child(even) {
+                background-color: #FAFAFC;
+            }
+
+            .raw-center-table tbody tr:hover {
+                background-color: #E6FBFC;
+            }
+
+            .raw-table-scroll {
+                width: 100%;
+                overflow-x: auto;
+                overflow-y: auto;
+                max-height: 520px;
+                border: 1px solid #E5E7EB;
+                border-radius: 10px;
+                background-color: #FFFFFF;
+            }
+
+            .raw-summary-table {
+                width: 520px;
+                border-collapse: collapse;
+                background-color: #FFFFFF;
+                font-size: 14px;
+                border: 1px solid #E5E7EB;
+            }
+
+            .raw-summary-table thead th {
+                background-color: #F5F0FF;
+                color: #5E2BB8;
+                font-weight: 700;
+                text-align: center !important;
+                padding: 10px 8px;
+                border: 1px solid #E5E7EB;
+                white-space: nowrap;
+            }
+
+            .raw-summary-table tbody td {
+                text-align: center !important;
+                padding: 9px 8px;
+                border: 1px solid #E5E7EB;
+                color: #1F1B2E;
+                vertical-align: middle;
+                white-space: nowrap;
+            }
+
+            .raw-summary-table tbody tr:nth-child(even) {
+                background-color: #FAFAFC;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # 금액 관련 컬럼에 1,000단위 콤마를 적용하기 위한 표시용 함수
     def format_money_columns_for_display(dataframe):
         display_df = dataframe.copy()
@@ -822,6 +906,23 @@ with tab_raw:
             )
 
         return display_df
+
+    # DataFrame을 가운데 정렬 HTML 테이블로 출력하는 함수
+    def render_centered_raw_table(dataframe):
+        html = dataframe.to_html(
+            index=False,
+            escape=False,
+            classes="raw-center-table",
+        )
+
+        st.markdown(
+            f"""
+            <div class="raw-table-scroll">
+                {html}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # 빨간 박스 영역 요약용 함수
     # 기준 컬럼: 본부, 지원금액.1
@@ -854,11 +955,14 @@ with tab_raw:
     with raw_tab1:
         final_display_df = format_money_columns_for_display(final_df)
 
-        st.dataframe(
-            final_display_df,
-            use_container_width=True,
-            hide_index=True,
+        # 최종실적 화면 표시용 표에서는 본부, 지원금액.1 컬럼 제거
+        remove_columns = ["본부", "지원금액.1"]
+        final_display_df = final_display_df.drop(
+            columns=[col for col in remove_columns if col in final_display_df.columns],
+            errors="ignore",
         )
+
+        render_centered_raw_table(final_display_df)
 
         hq_summary = make_headquarter_support_summary(final_df)
 
@@ -866,13 +970,19 @@ with tab_raw:
             st.markdown("---")
             st.markdown("#### 본부별 지원금액 요약")
 
-            st.caption("기준: 최종실적 시트의 `본부`, `지원금액.1` 컬럼")
+            summary_html = hq_summary.to_html(
+                index=False,
+                escape=False,
+                classes="raw-summary-table",
+            )
 
-            st.dataframe(
-                hq_summary,
-                use_container_width=False,
-                width=500,
-                hide_index=True,
+            st.markdown(
+                f"""
+                <div style="width: 520px;">
+                    {summary_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         csv = final_df.to_csv(index=False).encode("utf-8-sig")
@@ -881,11 +991,7 @@ with tab_raw:
     with raw_tab2:
         dept_display_df = format_money_columns_for_display(dept_df)
 
-        st.dataframe(
-            dept_display_df,
-            use_container_width=True,
-            hide_index=True,
-        )
+        render_centered_raw_table(dept_display_df)
 
         csv = dept_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("부서별 모객현황 CSV 다운로드", csv, "dept_data.csv", "text/csv")
@@ -893,12 +999,9 @@ with tab_raw:
     with raw_tab3:
         participant_display_df = format_money_columns_for_display(participant_df)
 
-        st.dataframe(
-            participant_display_df,
-            use_container_width=True,
-            hide_index=True,
-        )
+        render_centered_raw_table(participant_display_df)
 
         csv = participant_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("참여대리점 리스트 CSV 다운로드", csv, "participant_data.csv", "text/csv")
+
 
