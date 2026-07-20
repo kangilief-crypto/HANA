@@ -705,11 +705,11 @@ with tab_dept:
 
     st.markdown("---")
 
-        with st.expander("부서별 휴일 예약 발생률 보기", expanded=True):
-            st.dataframe(
-                기존_변수명,
-                use_container_width=True,
-            )
+    with st.expander("부서별 휴일 예약 발생률 보기", expanded=True):
+        st.dataframe(
+            기준_변수명,
+            use_container_width=True,
+        )
 
         try:
             # 분모: 참여대리점 리스트
