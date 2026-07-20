@@ -511,7 +511,31 @@ def render_league(league_name, color):
 
         st.markdown(f"**{league_name} 순위표**")
 
-        table = league_df[
+        # 최종순위 표시 문구 변환
+        # 기본: 최종순위 1~10 → 모객순위 1등 ~ 모객순위 10등
+        # 예외: 대한여행사[AK 분당점] → 성장률순위 1등
+        table_source = league_df.copy()
+
+        def format_final_rank(row):
+            agency_name = str(row.get("대리점한글명", ""))
+            final_rank = row.get("최종순위", None)
+
+            if agency_name == "대한여행사[AK 분당점]":
+                return "성장률순위 1등"
+
+            if pd.notna(final_rank):
+                try:
+                    rank_num = int(final_rank)
+                    if 1 <= rank_num <= 10:
+                        return f"모객순위 {rank_num}등"
+                except Exception:
+                    pass
+
+            return ""
+
+        table_source["최종순위표시"] = table_source.apply(format_final_rank, axis=1)
+
+        table = table_source[
             [
                 "담당부서",
                 "담당팀명",
@@ -520,31 +544,80 @@ def render_league(league_name, color):
                 "순예약인원",
                 "담당세일즈",
                 "계약관계",
-                "최종순위",
+                "최종순위표시",
                 "지원금액",
             ]
         ].copy()
 
+        table = table.rename(columns={"최종순위표시": "최종순위"})
+
         table.index = table.index + 1
         table.index.name = "순번"
 
-        st.dataframe(
-            table,
-            use_container_width=True,
-            height=min(650, 40 + len(table) * 35),
-            column_config={
-                "순번": st.column_config.NumberColumn("순번", width="small"),
-                "담당부서": st.column_config.TextColumn("담당부서", width="small"),
-                "담당팀명": st.column_config.TextColumn("담당팀명", width="small"),
-                "대리점코드": st.column_config.TextColumn("대리점코드", width="small"),
-                "대리점한글명": st.column_config.TextColumn("대리점한글명", width="medium"),
-                "순예약인원": st.column_config.NumberColumn("순예약인원", width="small", format="%d"),
-                "담당세일즈": st.column_config.TextColumn("담당세일즈", width="small"),
-                "계약관계": st.column_config.TextColumn("계약관계", width="small"),
-                "최종순위": st.column_config.NumberColumn("최종순위", width="small", format="%d"),
-                "지원금액": st.column_config.NumberColumn("지원금액", width="small", format="%,d"),
-            },
+        # 순위표 가운데 정렬 HTML 테이블 출력
+        display_table = table.copy().reset_index()
+
+        if "지원금액" in display_table.columns:
+            display_table["지원금액"] = display_table["지원금액"].apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else ""
+            )
+
+        if "순예약인원" in display_table.columns:
+            display_table["순예약인원"] = display_table["순예약인원"].apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else ""
+            )
+
+        table_html = display_table.to_html(
+            index=False,
+            escape=False,
+            classes="rank-table",
         )
+
+        st.markdown(
+            """
+            <style>
+                .rank-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    background-color: #FFFFFF;
+                    font-size: 14px;
+                    border: 1px solid #E5E7EB;
+                }
+
+                .rank-table thead th {
+                    background-color: #F5F0FF;
+                    color: #5E2BB8;
+                    font-weight: 700;
+                    text-align: center !important;
+                    padding: 10px 8px;
+                    border: 1px solid #E5E7EB;
+                    white-space: nowrap;
+                }
+
+                .rank-table tbody td {
+                    text-align: center !important;
+                    padding: 9px 8px;
+                    border: 1px solid #E5E7EB;
+                    color: #1F1B2E;
+                    vertical-align: middle;
+                    white-space: nowrap;
+                }
+
+                .rank-table tbody tr:nth-child(even) {
+                    background-color: #FAFAFC;
+                }
+
+                .rank-table tbody tr:hover {
+                    background-color: #E6FBFC;
+                }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(table_html, unsafe_allow_html=True)
+
+
 
     st.markdown("---")
     st.markdown(f"##### {league_name} 전체 요약")
@@ -589,7 +662,8 @@ with tab_dept:
 
     st.markdown("---")
 
-    with st.expander("부서별 휴일 예약 발생률 보기", expanded=False):
+with st.expander("부서별 휴일 예약 발생률 보기", expanded=True):
+
         try:
             # 분모: 참여대리점 리스트
             participant = participant_df.copy()
