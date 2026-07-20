@@ -6,7 +6,7 @@ import plotly.express as px
 # 페이지 설정
 # ════════════════════════════════════════════
 st.set_page_config(
-    page_title="휴일 프로모션",
+    page_title="유통점 휴일 프로모션",
     layout="wide",
 )
 
@@ -77,15 +77,15 @@ st.markdown(
         margin-bottom: 8px !important;
     }}
 
-    .stCaption, [data-testid="stCaptionContainer"] {{
-        color: {TEXT_GRAY} !important;
-        font-size: 14px !important;
-    }}
-
     h2, h3 {{
         color: {TEXT_DARK} !important;
         font-weight: 700 !important;
         letter-spacing: -0.01em !important;
+    }}
+
+    .stCaption, [data-testid="stCaptionContainer"] {{
+        color: {TEXT_GRAY} !important;
+        font-size: 14px !important;
     }}
 
     [data-testid="stMetric"] {{
@@ -164,13 +164,52 @@ st.markdown(
         background-color: {BRAND_MINT};
         color: white;
     }}
+
+    .overview-box {{
+        background-color: #FFFFFF;
+        border: 1px solid {BORDER_LIGHT};
+        border-left: 6px solid {BRAND_PURPLE};
+        border-radius: 12px;
+        padding: 20px 24px;
+        margin-top: 12px;
+        margin-bottom: 22px;
+    }}
+
+    .overview-title {{
+        color: {BRAND_PURPLE};
+        font-size: 26px;
+        font-weight: 800;
+        margin-bottom: 14px;
+    }}
+
+    .overview-table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+    }}
+
+    .overview-table th {{
+        width: 110px;
+        text-align: left;
+        color: {BRAND_PURPLE};
+        background-color: {PURPLE_LIGHT};
+        padding: 10px 12px;
+        border: 1px solid {BORDER_LIGHT};
+        vertical-align: top;
+    }}
+
+    .overview-table td {{
+        color: {TEXT_DARK};
+        padding: 10px 12px;
+        border: 1px solid {BORDER_LIGHT};
+        line-height: 1.6;
+        vertical-align: top;
+        background-color: #FFFFFF;
+    }}
 </style>
 """,
     unsafe_allow_html=True,
 )
-
-st.title("휴일 프로모션")
-st.caption("주간 업데이트")
 
 EXCEL_FILE = "weekly_data.xlsx"
 
@@ -178,17 +217,19 @@ EXCEL_FILE = "weekly_data.xlsx"
 # 공통 함수
 # ════════════════════════════════════════════
 def normalize_columns(df):
-    df = df.loc[:, ~df.columns.astype(str).str.contains("^Unnamed")]
     df = df.copy()
+    df.columns = df.columns.astype(str)
+    df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
     rename_map = {
         "담당팀": "담당팀명",
         "대리점명": "대리점한글명",
         "지급대상": "모객순위",
-        "최종순위": "모객순위",
+        "최종 순위": "최종순위",
+        "최종순위": "최종순위",
     }
-    df = df.rename(columns=rename_map)
 
+    df = df.rename(columns=rename_map)
     return df
 
 
@@ -204,7 +245,7 @@ def clean_sales_df(df):
         df["번호"] = pd.to_numeric(df["번호"], errors="coerce")
         df = df.dropna(subset=["번호"])
 
-    for col in ["순예약인원", "전분기 예약인원", "모객성장률", "지원금액"]:
+    for col in ["순예약인원", "전분기 예약인원", "모객성장률", "지원금액", "최종순위", "모객순위"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -215,33 +256,64 @@ def clean_sales_df(df):
 
 
 @st.cache_data(ttl=3600)
-def load_main_data():
-    xl = pd.ExcelFile(EXCEL_FILE)
-
-    preferred_sheets = [
-        "부서별 모객현황",
-        "최종실적",
-        "수정",
-        "부서별 요약",
-        "리그별 모객순위",
-    ]
-
-    for sheet in preferred_sheets:
-        if sheet in xl.sheet_names:
-            try:
-                df = pd.read_excel(EXCEL_FILE, sheet_name=sheet, header=1)
-                df = clean_sales_df(df)
-                required = {"담당부서", "담당팀명", "담당세일즈", "대리점코드", "대리점한글명", "리그", "계약관계", "순예약인원"}
-                if required.issubset(df.columns):
-                    return df, sheet
-            except Exception:
-                pass
-
-    raise ValueError("사용 가능한 실적 시트를 찾지 못했습니다. '부서별 모객현황' 또는 '최종실적' 시트를 확인해주세요.")
+def load_excel_book():
+    return pd.ExcelFile(EXCEL_FILE)
 
 
 @st.cache_data(ttl=3600)
-def load_participation_data():
+def load_final_data():
+    df = pd.read_excel(EXCEL_FILE, sheet_name="최종실적", header=1)
+    df = clean_sales_df(df)
+
+    required = {
+        "담당부서",
+        "담당팀명",
+        "담당세일즈",
+        "대리점코드",
+        "대리점한글명",
+        "리그",
+        "계약관계",
+        "순예약인원",
+    }
+
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"최종실적 시트에 필수 컬럼이 없습니다: {', '.join(missing)}")
+
+    if "최종순위" not in df.columns:
+        df["최종순위"] = None
+
+    if "지원금액" not in df.columns:
+        df["지원금액"] = None
+
+    return df
+
+
+@st.cache_data(ttl=3600)
+def load_dept_data():
+    df = pd.read_excel(EXCEL_FILE, sheet_name="부서별 모객현황", header=1)
+    df = clean_sales_df(df)
+
+    required = {
+        "담당부서",
+        "담당팀명",
+        "담당세일즈",
+        "대리점코드",
+        "대리점한글명",
+        "리그",
+        "계약관계",
+        "순예약인원",
+    }
+
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"부서별 모객현황 시트에 필수 컬럼이 없습니다: {', '.join(missing)}")
+
+    return df
+
+
+@st.cache_data(ttl=3600)
+def load_participation_list():
     df_list = pd.read_excel(EXCEL_FILE, sheet_name="참여대리점 리스트", header=1)
     df_list = normalize_columns(df_list)
 
@@ -260,18 +332,13 @@ def load_participation_data():
             ~df_list["비고"].astype(str).str.contains("|".join(exclude_keywords), na=False)
         ].copy()
 
-    df_zero = pd.read_excel(EXCEL_FILE, sheet_name="휴일예약 0명 대리점", header=1)
-    df_zero = normalize_columns(df_zero)
-
-    for col in ["담당부서", "담당팀명"]:
-        if col in df_zero.columns:
-            df_zero[col] = df_zero[col].ffill()
-
-    return df_list, df_zero
+    return df_list
 
 
 try:
-    df, source_sheet = load_main_data()
+    final_df = load_final_data()
+    dept_df = load_dept_data()
+    participant_df = load_participation_list()
 except FileNotFoundError:
     st.error("weekly_data.xlsx 파일을 찾을 수 없습니다. GitHub 저장소 최상단에 업로드해주세요.")
     st.stop()
@@ -279,28 +346,79 @@ except Exception as e:
     st.error(f"엑셀 데이터를 불러오는 중 오류가 발생했습니다: {e}")
     st.stop()
 
+# 기본 분석 데이터
+# - 리그 순위표: 최종실적
+# - 부서별 예약/발생률: 부서별 모객현황
+df = final_df.copy()
+
+# ════════════════════════════════════════════
+# 제목 및 개요
+# ════════════════════════════════════════════
+st.title("유통점 휴일 프로모션")
+st.caption("주간 업데이트")
+
+st.markdown(
+    """
+<div class="overview-box">
+    <div class="overview-title">[유통점 휴일 프로모션]</div>
+    <table class="overview-table">
+        <tr>
+            <th>기간</th>
+            <td>26년 4월 11일 ~ 6월 28일 기간 내 휴일(주말+공휴일) 최초 예약일 기준</td>
+        </tr>
+        <tr>
+            <th>조건</th>
+            <td>P,B,U 속성(주말 유통점 현장 예약에 한함)</td>
+        </tr>
+        <tr>
+            <th>제외</th>
+            <td>코브랜드, 닷컴, 랜드온리, 유아/아동 제외</td>
+        </tr>
+        <tr>
+            <th>지급</th>
+            <td>
+                1) 리그별 모객 순위(1위 ~ 10위), 모객성장률(1위~10위) 대리점 대상 VI 지급<br>
+                2) 최소 모객인원 30명 허들 미달성시 지급대상에서 제외<br>
+                3) 모객 동일 수 예약 시 상위매출 순서대로 순위 인정
+            </td>
+        </tr>
+        <tr>
+            <th>대상</th>
+            <td>공식인증예약센터 212개 (유통점 172개_현대 제외 + 직계약 유통점 15개 + 부서별 선정대리점 5개)</td>
+        </tr>
+    </table>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
 # ════════════════════════════════════════════
 # 사이드바 필터
 # ════════════════════════════════════════════
 st.sidebar.header("필터")
-st.sidebar.caption(f"사용 시트: {source_sheet}")
+st.sidebar.caption("리그 순위표 기준: 최종실적")
+st.sidebar.caption("부서별 예약/발생률 기준: 부서별 모객현황")
 
 df_f = df.copy()
+dept_f = dept_df.copy()
 
 if "담당부서" in df.columns:
     부서목록 = sorted(df["담당부서"].dropna().astype(str).unique())
     선택부서 = st.sidebar.multiselect("담당부서", 부서목록, default=부서목록)
     df_f = df_f[df_f["담당부서"].astype(str).isin(선택부서)]
+    dept_f = dept_f[dept_f["담당부서"].astype(str).isin(선택부서)]
 
 if "담당팀명" in df.columns:
     팀목록 = sorted(df_f["담당팀명"].dropna().astype(str).unique())
     선택팀 = st.sidebar.multiselect("담당팀명", 팀목록, default=팀목록)
     df_f = df_f[df_f["담당팀명"].astype(str).isin(선택팀)]
+    dept_f = dept_f[dept_f["담당팀명"].astype(str).isin(선택팀)]
 
 if "담당세일즈" in df.columns:
     담당자목록 = sorted(df_f["담당세일즈"].dropna().astype(str).unique())
     선택담당자 = st.sidebar.multiselect("담당세일즈", 담당자목록, default=담당자목록)
     df_f = df_f[df_f["담당세일즈"].astype(str).isin(선택담당자)]
+    dept_f = dept_f[dept_f["담당세일즈"].astype(str).isin(선택담당자)]
 
 # ════════════════════════════════════════════
 # 핵심 지표
@@ -319,13 +437,13 @@ st.divider()
 # ════════════════════════════════════════════
 # 메인 탭
 # ════════════════════════════════════════════
-tab_a, tab_b, tab_dept, tab_league, tab_contract = st.tabs(
-    ["A리그 (30명 이상)", "B리그 (30명 이상)", "부서별", "리그 구성비", "계약관계별"]
+tab_a, tab_b, tab_dept, tab_league, tab_contract, tab_raw = st.tabs(
+    ["A리그 (30명 이상)", "B리그 (30명 이상)", "부서별 예약인원", "리그 구성비", "계약관계별", "원본데이터"]
 )
 
-group_cols = ["리그", "대리점한글명"]
+# 리그 순위표 데이터: 최종실적 기준
 대리점별 = (
-    df_f.groupby(group_cols, as_index=False)
+    df_f.groupby(["리그", "대리점한글명"], as_index=False)
     .agg(
         순예약인원=("순예약인원", "sum"),
         담당부서=("담당부서", "first"),
@@ -333,6 +451,8 @@ group_cols = ["리그", "대리점한글명"]
         담당세일즈=("담당세일즈", "first"),
         대리점코드=("대리점코드", "first"),
         계약관계=("계약관계", "first"),
+        최종순위=("최종순위", "first"),
+        지원금액=("지원금액", "first"),
     )
 )
 
@@ -341,7 +461,11 @@ group_cols = ["리그", "대리점한글명"]
 
 def render_league(league_name, color):
     league_df = 대리점별_30[대리점별_30["리그"] == league_name].copy()
-    league_df = league_df.sort_values("순예약인원", ascending=False).reset_index(drop=True)
+    league_df = league_df.sort_values(
+        ["최종순위", "순예약인원"],
+        ascending=[True, False],
+        na_position="last",
+    ).reset_index(drop=True)
 
     league_all = 대리점별[대리점별["리그"] == league_name].copy()
 
@@ -349,7 +473,7 @@ def render_league(league_name, color):
         st.info(f"{league_name}에 데이터가 없습니다.")
         return
 
-    st.caption(f"{league_name} — 순예약인원 30명 이상 대리점 기준 차트 및 순위표")
+    st.caption(f"{league_name} — 순예약인원 30명 이상 허들 달성 대리점 기준")
 
     if len(league_df) == 0:
         st.info(f"{league_name}에 30명 이상인 대리점이 없습니다.")
@@ -366,7 +490,7 @@ def render_league(league_name, color):
         chart_height = max(400, len(league_df) * 28)
 
         fig = px.bar(
-            league_df,
+            league_df.sort_values("순예약인원", ascending=True),
             x="순예약인원",
             y="표시명",
             orientation="h",
@@ -377,7 +501,7 @@ def render_league(league_name, color):
 
         fig.update_layout(
             height=chart_height,
-            yaxis={"categoryorder": "total ascending", "title": ""},
+            yaxis={"title": ""},
             xaxis={"title": "순예약인원"},
             plot_bgcolor="white",
             paper_bgcolor="white",
@@ -388,19 +512,28 @@ def render_league(league_name, color):
         st.markdown(f"**{league_name} 순위표**")
 
         table = league_df[
-            ["담당부서", "담당팀명", "대리점코드", "대리점한글명", "순예약인원", "담당세일즈", "계약관계"]
+            [
+                "담당부서",
+                "담당팀명",
+                "대리점코드",
+                "대리점한글명",
+                "순예약인원",
+                "담당세일즈",
+                "계약관계",
+                "최종순위",
+                "지원금액",
+            ]
         ].copy()
 
         table.index = table.index + 1
-        table.index.name = "순위"
+        table.index.name = "순번"
 
         st.dataframe(
             table,
-            use_container_width=False,
-            width=1050,
-            height=min(600, 40 + len(table) * 35),
+            use_container_width=True,
+            height=min(650, 40 + len(table) * 35),
             column_config={
-                "순위": st.column_config.NumberColumn("순위", width="small"),
+                "순번": st.column_config.NumberColumn("순번", width="small"),
                 "담당부서": st.column_config.TextColumn("담당부서", width="small"),
                 "담당팀명": st.column_config.TextColumn("담당팀명", width="small"),
                 "대리점코드": st.column_config.TextColumn("대리점코드", width="small"),
@@ -408,6 +541,8 @@ def render_league(league_name, color):
                 "순예약인원": st.column_config.NumberColumn("순예약인원", width="small", format="%d"),
                 "담당세일즈": st.column_config.TextColumn("담당세일즈", width="small"),
                 "계약관계": st.column_config.TextColumn("계약관계", width="small"),
+                "최종순위": st.column_config.NumberColumn("최종순위", width="small", format="%d"),
+                "지원금액": st.column_config.NumberColumn("지원금액", width="small", format="%,d"),
             },
         )
 
@@ -428,7 +563,7 @@ with tab_b:
 
 with tab_dept:
     dept = (
-        df_f.groupby("담당부서", as_index=False)["순예약인원"]
+        dept_f.groupby("담당부서", as_index=False)["순예약인원"]
         .sum()
         .sort_values("순예약인원", ascending=False)
     )
@@ -452,8 +587,113 @@ with tab_dept:
 
     st.plotly_chart(fig, use_container_width=True)
 
+    st.markdown("---")
+
+    with st.expander("부서별 휴일 예약 발생률 보기", expanded=False):
+        try:
+            # 분모: 참여대리점 리스트
+            participant = participant_df.copy()
+
+            # 사이드바 필터와 동일하게 반영
+            if "담당부서" in participant.columns:
+                participant = participant[participant["담당부서"].astype(str).isin(선택부서)]
+
+            if "담당팀명" in participant.columns:
+                participant = participant[participant["담당팀명"].astype(str).isin(선택팀)]
+
+            total_by_dept = (
+                participant.groupby("담당부서")
+                .agg(참여_대리점수=("대리점코드", "nunique"))
+                .reset_index()
+            )
+
+            # 분자: 부서별 모객현황 내 예약 발생 대리점
+            active_base = dept_f[dept_f["순예약인원"] > 0].copy()
+
+            active_by_dept = (
+                active_base.groupby("담당부서")
+                .agg(예약발생_대리점수=("대리점코드", "nunique"))
+                .reset_index()
+            )
+
+            rate = total_by_dept.merge(active_by_dept, on="담당부서", how="left")
+            rate["예약발생_대리점수"] = rate["예약발생_대리점수"].fillna(0).astype(int)
+            rate["미예약_대리점수"] = rate["참여_대리점수"] - rate["예약발생_대리점수"]
+            rate["발생률(%)"] = (rate["예약발생_대리점수"] / rate["참여_대리점수"] * 100).round(1)
+
+            rate = rate[rate["담당부서"] != "기타"].copy()
+            rate = rate.sort_values("발생률(%)", ascending=False).reset_index(drop=True)
+
+            total_cnt = int(rate["참여_대리점수"].sum())
+            active_cnt = int(rate["예약발생_대리점수"].sum())
+            zero_cnt = int(rate["미예약_대리점수"].sum())
+            total_rate = round(active_cnt / total_cnt * 100, 1) if total_cnt > 0 else 0
+
+            st.caption(
+                "기준: 참여대리점 리스트의 전체 대리점 수 대비, 부서별 모객현황에서 순예약인원이 1명 이상 발생한 대리점 비율 "
+                "(비고가 퇴점 또는 거래중지인 대리점 제외)"
+            )
+
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("총 참여 대리점", f"{total_cnt:,}")
+            k2.metric("예약 발생", f"{active_cnt:,}")
+            k3.metric("미예약 대리점", f"{zero_cnt:,}")
+            k4.metric("전체 발생률", f"{total_rate}%")
+
+            fig = px.bar(
+                rate,
+                x="담당부서",
+                y="발생률(%)",
+                title="부서별 휴일 예약 발생률",
+                text=rate["발생률(%)"].astype(str) + "%",
+                color_discrete_sequence=[BRAND_PURPLE],
+            )
+
+            fig.update_traces(textposition="outside")
+            fig.update_layout(
+                height=420,
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                yaxis={"range": [0, 100], "title": "발생률 (%)"},
+                xaxis={"title": ""},
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("**부서별 상세**")
+
+            display = rate[
+                ["담당부서", "참여_대리점수", "예약발생_대리점수", "미예약_대리점수", "발생률(%)"]
+            ].copy()
+
+            display.index = display.index + 1
+            display.index.name = "순위"
+
+            st.dataframe(
+                display,
+                use_container_width=False,
+                width=850,
+                column_config={
+                    "순위": st.column_config.NumberColumn("순위", width="small"),
+                    "담당부서": st.column_config.TextColumn("담당부서", width="medium"),
+                    "참여_대리점수": st.column_config.NumberColumn("참여 대리점", width="small", format="%d"),
+                    "예약발생_대리점수": st.column_config.NumberColumn("예약 발생", width="small", format="%d"),
+                    "미예약_대리점수": st.column_config.NumberColumn("미예약", width="small", format="%d"),
+                    "발생률(%)": st.column_config.ProgressColumn(
+                        "발생률 (%)",
+                        format="%.1f%%",
+                        min_value=0,
+                        max_value=100,
+                        width="medium",
+                    ),
+                },
+            )
+
+        except Exception as e:
+            st.error(f"부서별 발생률 데이터를 불러오는 중 오류가 발생했습니다: {e}")
+
 with tab_league:
-    league = df_f.groupby("리그", as_index=False)["순예약인원"].sum()
+    league = dept_f.groupby("리그", as_index=False)["순예약인원"].sum()
 
     fig = px.pie(
         league,
@@ -468,7 +708,7 @@ with tab_league:
     st.plotly_chart(fig, use_container_width=True)
 
 with tab_contract:
-    contract = df_f.groupby("계약관계", as_index=False)["순예약인원"].sum()
+    contract = dept_f.groupby("계약관계", as_index=False)["순예약인원"].sum()
 
     fig = px.pie(
         contract,
@@ -488,112 +728,23 @@ with tab_contract:
     fig.update_layout(height=420, paper_bgcolor="white")
     st.plotly_chart(fig, use_container_width=True)
 
-st.divider()
+with tab_raw:
+    st.subheader("원본데이터")
+    st.caption("기준 시트: 최종실적")
 
-# ════════════════════════════════════════════
-# 부서별 휴일 예약 발생률
-# ════════════════════════════════════════════
-with st.expander("부서별 휴일 예약 발생률 보기", expanded=False):
-    try:
-        df_list, df_zero = load_participation_data()
+    raw_tab1, raw_tab2, raw_tab3 = st.tabs(["최종실적", "부서별 모객현황", "참여대리점 리스트"])
 
-        dept_total = df_list.groupby("담당부서").size().reset_index(name="참여_대리점수")
-        dept_zero = df_zero.groupby("담당부서").size().reset_index(name="미예약_대리점수")
+    with raw_tab1:
+        st.dataframe(final_df, use_container_width=True, hide_index=True)
+        csv = final_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("최종실적 CSV 다운로드", csv, "final_data.csv", "text/csv")
 
-        rate = dept_total.merge(dept_zero, on="담당부서", how="left")
-        rate["미예약_대리점수"] = rate["미예약_대리점수"].fillna(0).astype(int)
-        rate["예약발생_대리점수"] = rate["참여_대리점수"] - rate["미예약_대리점수"]
-        rate["발생률(%)"] = (rate["예약발생_대리점수"] / rate["참여_대리점수"] * 100).round(1)
+    with raw_tab2:
+        st.dataframe(dept_df, use_container_width=True, hide_index=True)
+        csv = dept_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("부서별 모객현황 CSV 다운로드", csv, "dept_data.csv", "text/csv")
 
-        rate = rate[rate["담당부서"] != "기타"].copy()
-        rate = rate.sort_values("발생률(%)", ascending=False).reset_index(drop=True)
-
-        total_cnt = int(rate["참여_대리점수"].sum())
-        active_cnt = int(rate["예약발생_대리점수"].sum())
-        zero_cnt = int(rate["미예약_대리점수"].sum())
-        total_rate = round(active_cnt / total_cnt * 100, 1) if total_cnt > 0 else 0
-
-        st.caption(
-            "기준: 참여대리점 리스트에서 비고가 퇴점 또는 거래중지인 대리점 제외 후, "
-            "휴일예약 0명 대리점 시트를 기준으로 산출"
-        )
-
-        fig = px.bar(
-            rate,
-            x="담당부서",
-            y="발생률(%)",
-            title="부서별 휴일 예약 발생률",
-            text=rate["발생률(%)"].astype(str) + "%",
-            color_discrete_sequence=[BRAND_PURPLE],
-        )
-
-        fig.update_traces(textposition="outside")
-        fig.update_layout(
-            height=420,
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            yaxis={"range": [0, 100], "title": "발생률 (%)"},
-            xaxis={"title": ""},
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        st.markdown("**부서별 상세**")
-
-        display = rate[
-            ["담당부서", "참여_대리점수", "예약발생_대리점수", "미예약_대리점수", "발생률(%)"]
-        ].copy()
-
-        display.index = display.index + 1
-        display.index.name = "순위"
-
-        st.dataframe(
-            display,
-            use_container_width=False,
-            width=800,
-            column_config={
-                "순위": st.column_config.NumberColumn("순위", width="small"),
-                "담당부서": st.column_config.TextColumn("담당부서", width="medium"),
-                "참여_대리점수": st.column_config.NumberColumn("참여 대리점", width="small", format="%d"),
-                "예약발생_대리점수": st.column_config.NumberColumn("예약 발생", width="small", format="%d"),
-                "미예약_대리점수": st.column_config.NumberColumn("미예약", width="small", format="%d"),
-                "발생률(%)": st.column_config.ProgressColumn(
-                    "발생률 (%)",
-                    format="%.1f%%",
-                    min_value=0,
-                    max_value=100,
-                    width="medium",
-                ),
-            },
-        )
-
-        st.markdown("---")
-        st.markdown("##### 전체 요약")
-
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("총 참여 대리점", f"{total_cnt:,}")
-        k2.metric("예약 발생", f"{active_cnt:,}")
-        k3.metric("미예약 대리점", f"{zero_cnt:,}")
-        k4.metric("전체 발생률", f"{total_rate}%")
-
-    except Exception as e:
-        st.error(f"부서별 발생률 데이터를 불러오는 중 오류가 발생했습니다: {e}")
-        st.caption("엑셀 파일에 '참여대리점 리스트'와 '휴일예약 0명 대리점' 시트가 모두 있어야 합니다.")
-
-st.divider()
-
-# ════════════════════════════════════════════
-# 원본 데이터
-# ════════════════════════════════════════════
-st.subheader("원본 데이터")
-st.caption(f"현재 표시 데이터 기준: {source_sheet}")
-
-st.dataframe(df_f, use_container_width=True, hide_index=True)
-
-csv = df_f.to_csv(index=False).encode("utf-8-sig")
-st.download_button(
-    "CSV 다운로드",
-    csv,
-    "filtered_data.csv",
-    "text/csv",
-)
+    with raw_tab3:
+        st.dataframe(participant_df, use_container_width=True, hide_index=True)
+        csv = participant_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("참여대리점 리스트 CSV 다운로드", csv, "participant_data.csv", "text/csv")
