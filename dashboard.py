@@ -355,7 +355,6 @@ df = final_df.copy()
 # 제목 및 개요
 # ════════════════════════════════════════════
 st.title("유통점 휴일 프로모션")
-st.caption("주간 업데이트")
 
 st.markdown(
     """
@@ -706,7 +705,7 @@ with tab_dept:
 
     st.markdown("---")
 
-    with st.expander("부서별 휴일 예약 발생률 보기", expanded=False):
+    with st.expander("부서별 휴일 예약 발생률 보기", expanded=true):
         try:
             # 분모: 참여대리점 리스트
             participant = participant_df.copy()
