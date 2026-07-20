@@ -511,40 +511,127 @@ def render_league(league_name, color):
 
         st.markdown(f"**{league_name} 순위표**")
 
-        table = league_df[
+                # 최종순위 표시 문구 변환
+
+        # 기본: 최종순위 1~10 → 모객순위 1등 ~ 모객순위 10등
+
+        # 예외: 대한여행사[AK분당점] → 성장률순위 1등
+
+        table_source = league_df.copy()
+
+
+
+        def format_final_rank(row):
+
+            agency_name = str(row.get("대리점한글명", ""))
+
+            final_rank = row.get("최종순위", None)
+
+
+
+            if agency_name == "대한여행사[AK분당점]":
+
+                return "성장률순위 1등"
+
+
+
+            if pd.notna(final_rank):
+
+                try:
+
+                    rank_num = int(final_rank)
+
+                    if 1 <= rank_num <= 10:
+
+                        return f"모객순위 {rank_num}등"
+
+                except Exception:
+
+                    pass
+
+
+
+            return ""
+
+
+
+        table_source["최종순위표시"] = table_source.apply(format_final_rank, axis=1)
+
+
+
+        table = table_source[
+
             [
+
                 "담당부서",
+
                 "담당팀명",
+
                 "대리점코드",
+
                 "대리점한글명",
+
                 "순예약인원",
+
                 "담당세일즈",
+
                 "계약관계",
-                "최종순위",
+
+                "최종순위표시",
+
                 "지원금액",
+
             ]
+
         ].copy()
 
+
+
+        table = table.rename(columns={"최종순위표시": "최종순위"})
+
+
+
         table.index = table.index + 1
+
         table.index.name = "순번"
 
+
+
         st.dataframe(
+
             table,
+
             use_container_width=True,
+
             height=min(650, 40 + len(table) * 35),
+
             column_config={
+
                 "순번": st.column_config.NumberColumn("순번", width="small"),
+
                 "담당부서": st.column_config.TextColumn("담당부서", width="small"),
+
                 "담당팀명": st.column_config.TextColumn("담당팀명", width="small"),
+
                 "대리점코드": st.column_config.TextColumn("대리점코드", width="small"),
+
                 "대리점한글명": st.column_config.TextColumn("대리점한글명", width="medium"),
+
                 "순예약인원": st.column_config.NumberColumn("순예약인원", width="small", format="%d"),
+
                 "담당세일즈": st.column_config.TextColumn("담당세일즈", width="small"),
+
                 "계약관계": st.column_config.TextColumn("계약관계", width="small"),
-                "최종순위": st.column_config.NumberColumn("최종순위", width="small", format="%d"),
+
+                "최종순위": st.column_config.TextColumn("최종순위", width="medium"),
+
                 "지원금액": st.column_config.NumberColumn("지원금액", width="small", format="%,d"),
+
             },
+
         )
+
+
 
     st.markdown("---")
     st.markdown(f"##### {league_name} 전체 요약")
