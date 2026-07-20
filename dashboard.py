@@ -706,7 +706,6 @@ with tab_dept:
     st.markdown("---")
 
         with st.expander("부서별 휴일 예약 발생률 보기", expanded=True):
-
         try:
             # 분모: 참여대리점 리스트
             participant = participant_df.copy()
