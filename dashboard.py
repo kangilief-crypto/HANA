@@ -529,7 +529,7 @@ def render_league(league_name, color):
 
 
 
-            if agency_name == "대한여행사[AK분당점]":
+            if agency_name == "대한여행사[AK 분당점]":
 
                 return "성장률순위 1등"
 
