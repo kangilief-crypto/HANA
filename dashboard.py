@@ -617,8 +617,6 @@ def render_league(league_name, color):
 
         st.markdown(table_html, unsafe_allow_html=True)
 
-
-
     st.markdown("---")
     st.markdown(f"##### {league_name} 전체 요약")
 
@@ -662,14 +660,7 @@ with tab_dept:
 
     st.markdown("---")
 
-with tab_dept:
-    ...
-    st.markdown("---")
-
     with st.expander("부서별 휴일 예약 발생률 보기", expanded=True):
-        try:
-            ...
-
         try:
             # 분모: 참여대리점 리스트
             participant = participant_df.copy()
