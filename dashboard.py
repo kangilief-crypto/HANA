@@ -805,17 +805,100 @@ with tab_raw:
 
     raw_tab1, raw_tab2, raw_tab3 = st.tabs(["최종실적", "부서별 모객현황", "참여대리점 리스트"])
 
+    # 금액 관련 컬럼에 1,000단위 콤마를 적용하기 위한 표시용 함수
+    def format_money_columns_for_display(dataframe):
+        display_df = dataframe.copy()
+
+        money_keywords = ["금액", "지원금", "매출"]
+        money_columns = [
+            col for col in display_df.columns
+            if any(keyword in str(col) for keyword in money_keywords)
+        ]
+
+        for col in money_columns:
+            display_df[col] = pd.to_numeric(display_df[col], errors="coerce")
+            display_df[col] = display_df[col].apply(
+                lambda x: f"{int(x):,}" if pd.notna(x) else ""
+            )
+
+        return display_df
+
+    # 빨간 박스 영역 요약용 함수
+    # 기준 컬럼: 본부, 지원금액.1
+    def make_headquarter_support_summary(dataframe):
+        if "본부" not in dataframe.columns or "지원금액.1" not in dataframe.columns:
+            return pd.DataFrame()
+
+        summary_base = dataframe[["본부", "지원금액.1"]].copy()
+        summary_base["본부"] = summary_base["본부"].astype(str).str.strip()
+        summary_base["지원금액.1"] = pd.to_numeric(summary_base["지원금액.1"], errors="coerce").fillna(0)
+
+        summary_base = summary_base[
+            (summary_base["본부"] != "")
+            & (summary_base["본부"].str.lower() != "none")
+            & (summary_base["본부"].str.lower() != "nan")
+        ].copy()
+
+        summary = (
+            summary_base.groupby("본부", as_index=False)
+            .agg(지원금액합계=("지원금액.1", "sum"))
+            .sort_values("지원금액합계", ascending=False)
+        )
+
+        summary["지원금액합계"] = summary["지원금액합계"].apply(
+            lambda x: f"{int(x):,}" if pd.notna(x) else ""
+        )
+
+        return summary
+
     with raw_tab1:
-        st.dataframe(final_df, use_container_width=True, hide_index=True)
+        final_display_df = format_money_columns_for_display(final_df)
+
+        st.dataframe(
+            final_display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        hq_summary = make_headquarter_support_summary(final_df)
+
+        if not hq_summary.empty:
+            st.markdown("---")
+            st.markdown("#### 본부별 지원금액 요약")
+
+            st.caption("기준: 최종실적 시트의 `본부`, `지원금액.1` 컬럼")
+
+            st.dataframe(
+                hq_summary,
+                use_container_width=False,
+                width=500,
+                hide_index=True,
+            )
+
         csv = final_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("최종실적 CSV 다운로드", csv, "final_data.csv", "text/csv")
 
     with raw_tab2:
-        st.dataframe(dept_df, use_container_width=True, hide_index=True)
+        dept_display_df = format_money_columns_for_display(dept_df)
+
+        st.dataframe(
+            dept_display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
         csv = dept_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("부서별 모객현황 CSV 다운로드", csv, "dept_data.csv", "text/csv")
 
     with raw_tab3:
-        st.dataframe(participant_df, use_container_width=True, hide_index=True)
+        participant_display_df = format_money_columns_for_display(participant_df)
+
+        st.dataframe(
+            participant_display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
         csv = participant_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button("참여대리점 리스트 CSV 다운로드", csv, "participant_data.csv", "text/csv")
+
